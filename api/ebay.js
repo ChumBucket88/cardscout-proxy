@@ -1,7 +1,22 @@
 const fetch = require("node-fetch");
 
-const EBAY_APP_ID = "TaylorLa-TradingC-PRD-b18338082-58ae9d13";
-const FINDING_API = "https://svcs.ebay.com/services/search/FindingService/v1";
+const APP_ID = process.env.EBAY_APP_ID;
+const CERT_ID = process.env.EBAY_CERT_ID;
+
+async function getToken() {
+  const credentials = Buffer.from(`${APP_ID}:${CERT_ID}`).toString("base64");
+  const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
+    method: "POST",
+    headers: {
+      "Authorization": `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope",
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error("Failed to get token: " + JSON.stringify(data));
+  return data.access_token;
+}
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,35 +26,27 @@ module.exports = async (req, res) => {
   const { query, type } = req.query;
   if (!query) return res.status(400).json({ error: "Missing query" });
 
-  const completed = type === "sold";
-  const operation = completed ? "findCompletedItems" : "findItemsAdvanced";
-
-  const params = new URLSearchParams({
-    "OPERATION-NAME": operation,
-    "SERVICE-VERSION": "1.0.0",
-    "SECURITY-APPNAME": EBAY_APP_ID,
-    "RESPONSE-DATA-FORMAT": "JSON",
-    "REST-PAYLOAD": "",
-    "keywords": query,
-    "categoryId": "212",
-    "paginationInput.entriesPerPage": "25",
-    "sortOrder": completed ? "EndTimeSoonest" : "PricePlusShippingLowest",
-  });
-
-  if (completed) {
-    params.append("itemFilter(0).name", "SoldItemsOnly");
-    params.append("itemFilter(0).value", "true");
-  }
-  params.append("itemFilter(1).name", "ListingType");
-  params.append("itemFilter(1).value(0)", "Auction");
-  params.append("itemFilter(1).value(1)", "AuctionWithBIN");
-  params.append("itemFilter(1).value(2)", "FixedPrice");
-
   try {
-    const response = await fetch(FINDING_API + "?" + params.toString());
-    const data = await response.json();
-    res.json(data);
+    const token = await getToken();
+    const completed = type === "sold";
+    const params = new URLSearchParams({
+      q: query,
+      category_ids: "212",
+      sort: completed ? "endingSoonest" : "price",
+      limit: "25",
+    });
+
+    const r = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${params}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        "Content-Type": "application/json",
+      },
+    });
+    const data = await r.json();
+    res.json({ type, items: data.itemSummaries || [], total: data.total || 0 });
+
   } catch (err) {
-    res.status(500).json({ error: "eBay API error: " + err.message });
+    res.status(500).json({ error: err.message });
   }
 };
