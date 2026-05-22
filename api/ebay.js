@@ -1,12 +1,3 @@
-module.exports = async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  if (req.method === "OPTIONS") return res.status(200).end();
-
-
-const fetch = require("node-fetch");
-
 const APP_ID = process.env.EBAY_APP_ID;
 const CERT_ID = process.env.EBAY_CERT_ID;
 
@@ -21,13 +12,14 @@ async function getToken() {
     body: "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope",
   });
   const data = await res.json();
-  if (!data.access_token) throw new Error("Failed to get token: " + JSON.stringify(data));
+  if (!data.access_token) throw new Error("Token error: " + JSON.stringify(data));
   return data.access_token;
 }
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const { query, type } = req.query;
@@ -35,11 +27,10 @@ module.exports = async (req, res) => {
 
   try {
     const token = await getToken();
-    const completed = type === "sold";
     const params = new URLSearchParams({
       q: query,
       category_ids: "212",
-      sort: completed ? "endingSoonest" : "price",
+      sort: type === "sold" ? "endingSoonest" : "price",
       limit: "25",
     });
 
@@ -52,7 +43,6 @@ module.exports = async (req, res) => {
     });
     const data = await r.json();
     res.json({ type, items: data.itemSummaries || [], total: data.total || 0 });
-
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
