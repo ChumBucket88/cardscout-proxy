@@ -1,7 +1,8 @@
 const APP_ID = process.env.EBAY_APP_ID;
 const CERT_ID = process.env.EBAY_CERT_ID;
+const APIFY_TOKEN = process.env.APIFY_TOKEN;
 
-async function getToken() {
+async function getEbayToken() {
   const credentials = Buffer.from(`${APP_ID}:${CERT_ID}`).toString("base64");
   const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
     method: "POST",
@@ -16,6 +17,40 @@ async function getToken() {
   return data.access_token;
 }
 
+async function fetchSoldFromApify(query) {
+  // Run the Apify actor synchronously and get results
+  const url = `https://api.apify.com/v2/acts/caffein.dev~ebay-sold-listings/run-sync-get-dataset-items?token=${APIFY_TOKEN}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      keyword: query,
+      maxItems: 25,
+      country: "US",
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Apify error (${res.status}): ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+function normalizeSoldItems(items) {
+  // Convert Apify sold-listing format to our standard item shape
+  return (items || []).map(i => ({
+    title: i.title || i.name || "",
+    price: { value: String(i.price ?? i.soldPrice ?? 0), currency: i.currency || "USD" },
+    itemWebUrl: i.url || i.link || "#",
+    image: { imageUrl: i.image || i.imageUrl || i.thumbnail || null },
+    condition: i.condition || "Unknown",
+    itemEndDate: i.soldDate || i.dateSold || i.endDate || null,
+    seller: { username: i.seller || "", feedbackPercentage: i.sellerFeedback || "" },
+    buyingOptions: [i.listingType === "Auction" ? "AUCTION" : "FIXED_PRICE"],
+    bidCount: i.bidCount || 0,
+  }));
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -26,65 +61,29 @@ module.exports = async (req, res) => {
   if (!query) return res.status(400).json({ error: "Missing query" });
 
   try {
-    const token = await getToken();
-
     if (type === "sold") {
-      // Marketplace Insights API for sold listings
-      const params = new URLSearchParams({
-        q: query,
-        category_ids: "212",
-        limit: "25",
-      });
-
-      const r = await fetch(`https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search?${params}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-          "Content-Type": "application/json",
-        },
-      });
-      const data = await r.json();
-
-      // If access denied fall back to browse API
-      if (data.errors || !data.itemSales) {
-        const fallbackParams = new URLSearchParams({
-          q: query,
-          category_ids: "212",
-          sort: "endingSoonest",
-          limit: "25",
-        });
-        const fallback = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${fallbackParams}`, {
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-            "Content-Type": "application/json",
-          },
-        });
-        const fallbackData = await fallback.json();
-        return res.json({ type: "sold", items: fallbackData.itemSummaries || [], total: fallbackData.total || 0, source: "browse" });
-      }
-
-      return res.json({ type: "sold", items: data.itemSales || [], total: data.total || 0, source: "insights" });
-
-    } else {
-      // Browse API for active listings
-      const params = new URLSearchParams({
-        q: query,
-        category_ids: "212",
-        sort: "price",
-        limit: "25",
-      });
-
-      const r = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${params}`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-          "Content-Type": "application/json",
-        },
-      });
-      const data = await r.json();
-      return res.json({ type: "active", items: data.itemSummaries || [], total: data.total || 0, source: "browse" });
+      const apifyData = await fetchSoldFromApify(query);
+      const items = normalizeSoldItems(apifyData);
+      return res.json({ type: "sold", items, total: items.length, source: "apify" });
     }
+
+    // Active listings via eBay Browse API
+    const token = await getEbayToken();
+    const params = new URLSearchParams({
+      q: query,
+      category_ids: "212",
+      sort: "price",
+      limit: "25",
+    });
+    const r = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${params}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+        "Content-Type": "application/json",
+      },
+    });
+    const data = await r.json();
+    return res.json({ type: "active", items: data.itemSummaries || [], total: data.total || 0, source: "browse" });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
