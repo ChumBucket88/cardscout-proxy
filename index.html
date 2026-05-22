@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CardScout — eBay Card Analyzer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0f; color: #e8e8e8;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh; padding-bottom: 60px;
+      background-image:
+        radial-gradient(ellipse at 20% 20%, #1a0a2e 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, #0a1a2e 0%, transparent 50%);
+    }
+    .header { border-bottom: 1px solid #1e1e2e; padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon { width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #ffd700, #ff6b35); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .logo-text { font-size: 16px; font-weight: 700; letter-spacing: 2px; color: #fff; }
+    .logo-text span { color: #ffd700; }
+    .logo-sub { font-size: 10px; color: #555; letter-spacing: 1px; }
+    .nav { display: flex; gap: 6px; }
+    .nav-btn { background: transparent; border: 1px solid #2a2a3a; border-radius: 5px; padding: 6px 14px; color: #555; font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; cursor: pointer; }
+    .nav-btn.active { background: rgba(255,215,0,0.12); border-color: #ffd700; color: #ffd700; }
+    .main { max-width: 760px; margin: 40px auto 0; padding: 0 24px; }
+    .search-label { font-size: 11px; letter-spacing: 2px; color: #ffd700; margin-bottom: 8px; }
+    .search-row { display: flex; gap: 10px; }
+    .search-input { flex: 1; background: #12121a; border: 1px solid #2a2a3a; border-radius: 6px; padding: 13px 16px; color: #e8e8e8; font-size: 14px; font-family: inherit; outline: none; }
+    .search-input:focus { border-color: #ffd700; }
+    .search-btn { background: linear-gradient(135deg, #ffd700, #ff9500); border: none; border-radius: 6px; padding: 13px 24px; color: #0a0a0f; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; cursor: pointer; white-space: nowrap; }
+    .search-btn:disabled { background: #2a2a3a; color: #666; cursor: not-allowed; }
+    .search-tip { margin-top: 8px; font-size: 11px; color: #444; }
+    .loading { margin-top: 40px; text-align: center; color: #666; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .error-box { margin-top: 32px; padding: 16px 20px; background: rgba(255,77,109,0.08); border: 1px solid rgba(255,77,109,0.3); border-radius: 8px; color: #ff4d6d; font-size: 13px; }
+    .card-header { background: #12121a; border: 1px solid #1e1e2e; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .card-header-inner { display: flex; gap: 20px; align-items: flex-start; }
+    .card-img { width: 110px; height: 154px; border-radius: 8px; flex-shrink: 0; object-fit: cover; border: 2px solid #2a2a4a; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    .card-placeholder { width: 110px; height: 154px; border-radius: 8px; flex-shrink: 0; background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); border: 2px solid #2a2a4a; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    .card-info { flex: 1; min-width: 0; }
+    .card-sport { font-size: 11px; letter-spacing: 2px; color: #666; margin-bottom: 4px; }
+    .card-name { font-size: 16px; font-weight: 700; color: #fff; line-height: 1.4; margin-bottom: 10px; }
+    .card-prices { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 14px; }
+    .price-label { font-size: 10px; letter-spacing: 2px; color: #555; }
+    .price-value { font-size: 26px; font-weight: 700; line-height: 1.1; }
+    .price-sub { font-size: 10px; color: #444; }
+    .trend-badge { display: inline-block; border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+    .trend-reason { margin-top: 6px; font-size: 11px; color: #555; }
+    .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+    .stat-box { background: #12121a; border: 1px solid #1e1e2e; border-radius: 8px; padding: 14px; text-align: center; }
+    .stat-label { font-size: 10px; letter-spacing: 2px; color: #555; margin-bottom: 6px; }
+    .stat-value { font-size: 20px; font-weight: 700; }
+    .tabs-container { background: #12121a; border: 1px solid #1e1e2e; border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+    .tabs-header { display: flex; border-bottom: 1px solid #1e1e2e; }
+    .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; padding: 10px 16px; color: #555; font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; cursor: pointer; }
+    .tab-btn.active { color: #ffd700; border-bottom-color: #ffd700; background: rgba(255,215,0,0.1); }
+    .listing-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-bottom: 1px solid #0f0f1a; gap: 12px; text-decoration: none; }
+    .listing-row:last-child { border-bottom: none; }
+    .listing-title { font-size: 13px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .listing-meta { font-size: 11px; color: #444; margin-top: 2px; }
+    .listing-price { font-size: 15px; font-weight: 700; flex-shrink: 0; }
+    .deal-tag { font-size: 9px; background: rgba(0,255,157,0.15); color: #00ff9d; border: 1px solid rgba(0,255,157,0.3); border-radius: 3px; padding: 1px 6px; letter-spacing: 1px; }
+    .type-tag { font-size: 10px; border-radius: 3px; padding: 1px 6px; letter-spacing: 1px; }
+    .view-btn { font-size: 10px; color: #0a0a0f; font-family: inherit; font-weight: 700; background: linear-gradient(135deg, #ffd700, #ff9500); border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+    .empty-msg { padding: 24px; text-align: center; color: #444; font-size: 12px; }
+    .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .history-title { font-size: 11px; letter-spacing: 2px; color: #ffd700; }
+    .clear-btn { background: transparent; border: 1px solid #2a2a3a; border-radius: 5px; padding: 5px 12px; color: #555; font-family: inherit; font-size: 11px; cursor: pointer; }
+    .history-row { background: #12121a; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .history-name { font-size: 13px; color: #ccc; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-avg { font-size: 18px; font-weight: 700; color: #ffd700; }
+    .view-history-btn { background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.2); border-radius: 5px; padding: 5px 12px; color: #ffd700; font-family: inherit; font-size: 11px; cursor: pointer; }
+    .del-btn { background: transparent; border: 1px solid #1e1e2e; border-radius: 5px; padding: 5px 12px; color: #444; font-family: inherit; font-size: 11px; cursor: pointer; }
+    .hidden { display: none; }
+  </style>
+</head>
+
+<body>
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">🃏</div>
+    <div>
+      <div class="logo-text">CARD<span>SCOUT</span></div>
+      <div class="logo-sub">EBAY LIVE MARKET ANALYZER</div>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nav-btn active" id="btn-search" onclick="showView('search')">SEARCH</button>
+    <button class="nav-btn" id="btn-history" onclick="showView('history')">HISTORY</button>
+  </div>
+</div>
+
+<div class="main">
+  <div id="view-search">
+    <div class="search-label">SEARCH CARD</div>
+    <div class="search-row">
+      <input class="search-input" id="search-input" type="text"
+        placeholder="e.g. 2023 Topps Chrome Mike Trout PSA 10"
+        onkeydown="if(event.key==='Enter') analyze()" />
+      <button class="search-btn" id="search-btn" onclick="analyze()">ANALYZE</button>
+    </div>
+    <div class="search-tip">TIP: Include player name, year, set, and grade for best results</div>
+    <div class="loading hidden" id="loading">
+      <div style="font-size:32px;margin-bottom:12px">🔍</div>
+      <div style="font-size:12px;letter-spacing:3px">FETCHING LIVE EBAY DATA...</div>
+    </div>
+    <div class="error-box hidden" id="error-box"></div>
+    <div class="hidden" id="results"></div>
+  </div>
+
+  <div id="view-history" class="hidden">
+    <div class="history-header">
+      <div class="history-title">SEARCH HISTORY</div>
+      <button class="clear-btn" onclick="clearHistory()">CLEAR ALL</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+const PROXY = "https://cardscout-proxy.vercel.app/api";
+let history = JSON.parse(localStorage.getItem("cardscout-history") || "[]");
+let currentTab = "sold";
+
+function saveHistory() {
+  localStorage.setItem("cardscout-history", JSON.stringify(history));
+  updateHistoryNav();
+}
+
+function updateHistoryNav() {
+  const btn = document.getElementById("btn-history");
+  btn.textContent = history.length > 0 ? `HISTORY (${history.length})` : "HISTORY";
+}
+
+function showView(v) {
+  document.getElementById("view-search").classList.toggle("hidden", v !== "search");
+  document.getElementById("view-history").classList.toggle("hidden", v !== "history");
+  document.getElementById("btn-search").classList.toggle("active", v === "search");
+  document.getElementById("btn-history").classList.toggle("active", v !== "search");
+  if (v === "history") renderHistory();
+}
+
+function formatCurrency(n) {
+  return n != null && !isNaN(n) ? "$" + Number(n).toFixed(2) : "N/A";
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function trendBadge(trend) {
+  const map = {
+    Rising:    { color: "#00ff9d", bg: "rgba(0,255,157,0.12)", border: "rgba(0,255,157,0.4)", icon: "↑" },
+    Stable:    { color: "#ffd700", bg: "rgba(255,215,0,0.12)",  border: "rgba(255,215,0,0.4)",  icon: "→" },
+    Declining: { color: "#ff4d6d", bg: "rgba(255,77,109,0.12)", border: "rgba(255,77,109,0.4)", icon: "↓" },
+  }[trend] || { color: "#aaa", bg: "rgba(170,170,170,0.12)", border: "rgba(170,170,170,0.4)", icon: "•" };
+  return `<span class="trend-badge" style="color:${map.color};background:${map.bg};border:1px solid ${map.border}">${map.icon} ${trend}</span>`;
+}
+
+function cardPlaceholder(query) {
+  const initials = (query || "").split(" ").slice(0, 2).map(w => w[0]?.toUpperCase()).join("");
+  return `<div class="card-placeholder">
+    <div style="position:absolute;top:5px;left:5px;right:5px;bottom:5px;border:1px solid rgba(255,215,0,0.2);border-radius:4px"></div>
+    <div style="font-size:26px;font-weight:900;color:#ffd700;font-family:serif">${initials}</div>
+    <div style="font-size:7px;color:#555;letter-spacing:2px;margin-top:4px">TRADING CARD</div>
+    <div style="position:absolute;bottom:8px;font-size:6px;color:#333;letter-spacing:1px">CARDSCOUT</div>
+  </div>`;
+}
+
+function parseItems(data) {
+  return (data?.items || []).map(item => ({
+    title: item.title || "",
+    price: parseFloat(item.price?.value || item.currentBidPrice?.value || 0),
+    url: item.itemWebUrl || "#",
+    image: item.image?.imageUrl || item.thumbnailImages?.[0]?.imageUrl || null,
+    condition: item.condition || "Unknown",
+    listingType: item.buyingOptions?.includes("AUCTION") ? "Auction" : "Buy It Now",
+    bids: item.bidCount || 0,
+    seller: item.seller?.username || "",
+    sellerScore: item.seller?.feedbackPercentage || "",
+    endDate: item.itemEndDate || null,
+  }));
+}
+
+function calcStats(items) {
+  const prices = items.map(i => i.price).filter(p => p > 0).sort((a, b) => a - b);
+  if (!prices.length) return null;
+  const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
+  const mid = Math.floor(prices.length / 2);
+  const median = prices.length % 2 ? prices[mid] : (prices[mid - 1] + prices[mid]) / 2;
+  return {
+    avg: Math.round(avg * 100) / 100,
+    median: Math.round(median * 100) / 100,
+    low: prices[0], high: prices[prices.length - 1],
+    count: prices.length,
+    deal: Math.round(avg * 0.85 * 100) / 100,
+  };
+}
+
+function calcTrend(items) {
+  if (items.length < 4) return { trend: "Stable", reason: "Not enough data to determine trend." };
+  const sorted = [...items].sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+  const half = Math.floor(sorted.length / 2);
+  const avg = arr => arr.reduce((s, i) => s + i.price, 0) / arr.length;
+  const avgEarly = avg(sorted.slice(0, half));
+  const avgLate = avg(sorted.slice(half));
+  if (!avgEarly) return { trend: "Stable", reason: "Prices have been consistent." };
+  const pct = ((avgLate - avgEarly) / avgEarly) * 100;
+  if (pct > 5) return { trend: "Rising", reason: `Prices up ~${Math.abs(pct).toFixed(0)}% over recent sales.` };
+  if (pct < -5) return { trend: "Declining", reason: `Prices down ~${Math.abs(pct).toFixed(0)}% over recent sales.` };
+  return { trend: "Stable", reason: "Prices have been consistent across recent sales." };
+}
+
+function showTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  document.getElementById("tab-sold").classList.toggle("hidden", tab !== "sold");
+  document.getElementById("tab-active").classList.toggle("hidden", tab !== "active");
+}
+
+async function analyze(overrideQuery) {
+  const q = (overrideQuery || document.getElementById("search-input").value).trim();
+  if (!q) return;
+
+  document.getElementById("search-btn").disabled = true;
+  document.getElementById("search-btn").textContent = "SCANNING...";
+  document.getElementById("loading").classList.remove("hidden");
+  document.getElementById("error-box").classList.add("hidden");
+  document.getElementById("results").classList.add("hidden");
+
+  try {
+    const [soldRes, activeRes] = await Promise.all([
+      fetch(`${PROXY}/ebay?query=${encodeURIComponent(q)}&type=sold`),
+      fetch(`${PROXY}/ebay?query=${encodeURIComponent(q)}&type=active`),
+    ]);
+    const soldData = await soldRes.json();
+    const activeData = await activeRes.json();
+    if (soldData.error) throw new Error(soldData.error);
+    if (activeData.error) throw new Error(activeData.error);
+    const soldItems = parseItems(soldData);
+    const activeItems = parseItems(activeData);
+    if (!soldItems.length && !activeItems.length) throw new Error("No listings found. Try a different search term.");
+    const stats = calcStats(soldItems.length ? soldItems : activeItems);
+    if (!stats) throw new Error("Could not calculate pricing.");
+    const { trend, reason } = calcTrend(soldItems);
+    const cardImage = soldItems.find(i => i.image)?.image || activeItems.find(i => i.image)?.image || null;
+    const safeSrc = cardImage?.replace(/^http:\/\//i, "https://");
+
+    const d = {
+      cardName: q, cardImage: safeSrc,
+      totalSales: soldItems.length,
+      averagePrice: stats.avg, medianPrice: stats.median,
+      lowestPrice: stats.low, highestPrice: stats.high,
+      dealThreshold: stats.deal, marketTrend: trend, trendReason: reason,
+      recentSales: soldItems.slice(0, 10).map(i => ({
+        description: i.title.length > 55 ? i.title.slice(0, 55) + "…" : i.title,
+        condition: i.condition, price: i.price,
+        date: i.endDate ? new Date(i.endDate).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—",
+        url: i.url,
+      })),
+      activeListings: activeItems.slice(0, 8).map(i => ({
+        title: i.title.length > 60 ? i.title.slice(0, 60) + "…" : i.title,
+        price: i.price, type: i.listingType,
+        bids: i.bids, seller: i.seller, sellerRating: i.sellerScore,
+        url: i.url, isDeal: i.price > 0 && i.price <= stats.deal,
+      })),
+    };
+
+    const imgHtml = d.cardImage
+      ? `<img class="card-img" src="${d.cardImage}" onerror="this.style.display='none'" />`
+      : cardPlaceholder(d.cardName);
+
+    const soldRows = d.recentSales.length ? d.recentSales.map(s => `
+      <a class="listing-row" href="${s.url}" target="_blank" rel="noopener noreferrer">
+        <div style="flex:1;min-width:0">
+          <div class="listing-title">${s.description}</div>
+          <div class="listing-meta">${s.condition} · ${s.date}</div>
+        </div>
+        <div class="listing-price" style="color:${s.price <= d.dealThreshold ? '#00ff9d' : '#e8e8e8'}">
+          ${formatCurrency(s.price)}
+          ${s.price <= d.dealThreshold ? '<span class="deal-tag" style="margin-left:6px">DEAL</span>' : ''}
+        </div>
+      </a>`).join("") : `<div class="empty-msg">No listings found</div>`;
+
+    const activeRows = d.activeListings.length ? d.activeListings.map(item => `
+      <div class="listing-row">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="listing-title" style="max-width:240px">${item.title}</span>
+            ${item.isDeal ? '<span class="deal-tag">DEAL</span>' : ''}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;align-items:center;flex-wrap:wrap">
+            <span class="type-tag" style="color:${item.type==='Auction'?'#ff9500':'#4a9eff'};background:${item.type==='Auction'?'rgba(255,149,0,0.1)':'rgba(74,158,255,0.1)'};border:1px solid ${item.type==='Auction'?'rgba(255,149,0,0.2)':'rgba(74,158,255,0.2)'}">${item.type}</span>
+            ${item.bids > 0 ? `<span style="font-size:10px;color:#555">${item.bids} bids</span>` : ''}
+            ${item.sellerRating ? `<span style="font-size:10px;color:#444">⭐ ${item.sellerRating}%</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+          <div class="listing-price" style="color:${item.isDeal?'#00ff9d':item.price>d.averagePrice*1.2?'#ff4d6d':'#e8e8e8'}">${formatCurrency(item.price)}</div>
+          <a class="view-btn" href="${item.url}" target="_blank" rel="noopener noreferrer">VIEW →</a>
+        </div>
+      </div>`).join("") : `<div class="empty-msg">No active listings found</div>`;
+
+    document.getElementById("results").innerHTML = `
+      <div class="card-header"><div class="card-header-inner">
+        ${imgHtml}
+        <div class="card-info">
+          <div class="card-sport">SPORTS TRADING CARD</div>
+          <div class="card-name">${d.cardName}</div>
+          ${trendBadge(d.marketTrend)}
+          <div class="trend-reason">${d.trendReason}</div>
+          <div class="card-prices">
+            <div><div class="price-label">AVG PRICE</div><div class="price-value" style="color:#ffd700">${formatCurrency(d.averagePrice)}</div><div class="price-sub">${d.totalSales} listings</div></div>
+            <div><div class="price-label">DEAL BELOW</div><div class="price-value" style="color:#00ff9d">${formatCurrency(d.dealThreshold)}</div><div class="price-sub">good deal threshold</div></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-label">MEDIAN</div><div class="stat-value" style="color:#e8e8e8">${formatCurrency(d.medianPrice)}</div></div>
+        <div class="stat-box"><div class="stat-label">LOWEST</div><div class="stat-value" style="color:#00ff9d">${formatCurrency(d.lowestPrice)}</div></div>
+        <div class="stat-box"><div class="stat-label">HIGHEST</div><div class="stat-value" style="color:#ff4d6d">${formatCurrency(d.highestPrice)}</div></div>
+      </div>
+      <div class="tabs-container">
+        <div class="tabs-header">
+          <button class="tab-btn active" data-tab="sold" onclick="showTab('sold')">LISTINGS (${d.recentSales.length})</button>
+          <button class="tab-btn" data-tab="active" onclick="showTab('active')">ACTIVE (${d.activeListings.length})</button>
+        </div>
+        <div id="tab-sold">${soldRows}</div>
+        <div id="tab-active" class="hidden">${activeRows}</div>
+      </div>`;
+
+    document.getElementById("results").classList.remove("hidden");
+
+    const entry = {
+      id: Date.now(), query: q, searchedAt: new Date().toISOString(),
+      cardName: q, averagePrice: stats.avg,
+      marketTrend: trend, dealThreshold: stats.deal, result: d,
+    };
+    history = [entry, ...history].slice(0, 50);
+    saveHistory();
+
+  } catch(e) {
+    document.getElementById("error-box").textContent = "⚠ " + (e.message || "Something went wrong.");
+    document.getElementById("error-box").classList.remove("hidden");
+  } finally {
+    document.getElementById("loading").classList.add("hidden");
+    document.getElementById("search-btn").disabled = false;
+    document.getElementById("search-btn").textContent = "ANALYZE";
+  }
+}
+
+function renderHistory() {
+  const list = document.getElementById("history-list");
+  if (!history.length) {
+    list.innerHTML = `<div style="text-align:center;color:#333;padding:60px 0">
+      <div style="font-size:32px;margin-bottom:12px">📭</div>
+      <div style="font-size:12px;letter-spacing:2px">NO SEARCHES YET</div>
+      <div style="font-size:11px;color:#2a2a3a;margin-top:8px">Your analyzed cards will appear here</div>
+    </div>`;
+    return;
+  }
+  list.innerHTML = history.map(entry => `
+    <div class="history-row">
+      <div style="flex:1;min-width:0">
+        <div class="history-name">${entry.cardName || entry.query}</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap">
+          ${trendBadge(entry.marketTrend)}
+          <span style="font-size:11px;color:#555">${formatDate(entry.searchedAt)}</span>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="history-avg">${formatCurrency(entry.averagePrice)}</div>
+        <div style="font-size:10px;color:#444">avg</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <button class="view-history-btn" onclick="loadFromHistory(${entry.id})">VIEW</button>
+        <button class="del-btn" onclick="deleteEntry(${entry.id})">DEL</button>
+      </div>
+    </div>`).join("");
+}
+
+function loadFromHistory(id) {
+  const entry = history.find(h => h.id === id);
+  if (!entry) return;
+  document.getElementById("search-input").value = entry.query;
+  showView("search");
+  analyze(entry.query);
+}
+
+function deleteEntry(id) {
+  history = history.filter(h => h.id !== id);
+  saveHistory();
+  renderHistory();
+}
+
+function clearHistory() {
+  history = [];
+  saveHistory();
+  renderHistory();
+}
+
+updateHistoryNav();
+</script>
+</body>
+</html>
